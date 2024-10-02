@@ -24,14 +24,10 @@ This is free software, and you are welcome to redistribute it under certain cond
 print(copyrightNotice)
 
 from argparse import ArgumentParser
-
-from typing import Callable, List, ByteString, Tuple, Dict, NewType
-
+from typing import List
 from base64 import b64decode
-
 from Crypto.Hash import SHA1
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import unpad
 
 valueMap: List[str] = [
     'payload', 
@@ -63,7 +59,6 @@ xorList = ['。', '〃', '〄', '々', '〆', '〇', '〈', '〉', '《', '》',
 
 def decrypt(contents, key):
     decryption_key = SHA1.new(data=bytes(key, 'utf-8')).digest()[:16]
-
     return AES.new(decryption_key, AES.MODE_ECB).decrypt(contents)
 
 def deobfuscate(contents):
@@ -120,23 +115,21 @@ args = parser.parse_args()
 # parse keyfile
 def parse_key_entry(entry):
     key_list = entry.split(':', 1)
-
     return (bool(int(key_list[0])), key_list[1].strip())
 
 if not args.key:
     keylist = set(embeddedKeyList.splitlines())
 
     if args.keyfile:
-        keyfile = open(args.keyfile, 'r')
-        keyfile_contents = set(keyfile.readlines())
-
-        keylist = keylist | keyfile_contents
+        with open(args.keyfile, 'r') as keyfile:
+            keyfile_contents = set(keyfile.readlines())
+            keylist = keylist | keyfile_contents
 
     keylist = list(map(parse_key_entry, keylist))
 
 # open file
-encrypted_file = open(args.file, mode='rb')
-encrypted_contents = encrypted_file.read()
+with open(args.file, mode='rb') as encrypted_file:
+    encrypted_contents = encrypted_file.read()
 
 print(f'Opened {args.file}')
 
@@ -149,33 +142,15 @@ original_contents = ''
 
 if not args.key:
     for index in range(len(keylist)):
-        key = keylist[index]
-
-        print(f'Trying key {key[1]}')
-
         try:
-            original_contents = decrypt(contents, key[1]).decode('utf-8')
-        except:
-            if index >= len(keylist):
-                print('Ran out of keys!')
-                exit(1)
-
-            print('Wrong key, trying next one...')
-
-        if 'splitConfig' in original_contents:
-            print(f'Successfully decrypted {args.file} with key {key[1]}')
+            original_contents = decrypt(contents, keylist[index][1])
             break
+        except:
+            continue
 else:
-    try:
-        original_contents = decrypt(deobfuscated_contents, args.key).decode('utf-8')
-    except:
-        print('Wrong key!')
-        exit(1)
+    original_contents = decrypt(contents, args.key)
 
-if not args.raw:
-    config = original_contents.split('[splitConfig]')
-    values = dict(zip(valueMap, config))
-
-    print(values)
-else:
+if args.raw:
     print(original_contents)
+else:
+    print(original_contents.decode('utf-8'))
